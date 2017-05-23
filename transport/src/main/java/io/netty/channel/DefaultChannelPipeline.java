@@ -67,6 +67,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     private Map<EventExecutorGroup, EventExecutor> childExecutors;
     private MessageSizeEstimator.Handle estimatorHandle;
     private boolean firstRegistration = true;
+    private volatile boolean destroyed;
 
     /**
      * This is the head of a linked list that is processed by {@link #callHandlerAddedForAllHandlers()} and so process
@@ -138,6 +139,15 @@ public class DefaultChannelPipeline implements ChannelPipeline {
         return channel;
     }
 
+    private boolean checkDestroyed(ChannelHandler handler) {
+        if (destroyed) {
+            fireExceptionCaught(
+                    new ChannelPipelineException("Channel already closed, can not add handler " + handler));
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public final ChannelPipeline addFirst(String name, ChannelHandler handler) {
         return addFirst(null, name, handler);
@@ -145,6 +155,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline addFirst(EventExecutorGroup group, String name, ChannelHandler handler) {
+        if (checkDestroyed(handler)) {
+            return this;
+        }
+
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
             checkMultiplicity(handler);
@@ -194,6 +208,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     @Override
     public final ChannelPipeline addLast(EventExecutorGroup group, String name, ChannelHandler handler) {
+        if (checkDestroyed(handler)) {
+            return this;
+        }
+
         final AbstractChannelHandlerContext newCtx;
         synchronized (this) {
             checkMultiplicity(handler);
@@ -243,6 +261,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     @Override
     public final ChannelPipeline addBefore(
             EventExecutorGroup group, String baseName, String name, ChannelHandler handler) {
+        if (checkDestroyed(handler)) {
+            return this;
+        }
+
         final AbstractChannelHandlerContext newCtx;
         final AbstractChannelHandlerContext ctx;
         synchronized (this) {
@@ -302,6 +324,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
     @Override
     public final ChannelPipeline addAfter(
             EventExecutorGroup group, String baseName, String name, ChannelHandler handler) {
+        if (checkDestroyed(handler)) {
+            return this;
+        }
+
         final AbstractChannelHandlerContext newCtx;
         final AbstractChannelHandlerContext ctx;
 
@@ -512,6 +538,10 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
     private ChannelHandler replace(
             final AbstractChannelHandlerContext ctx, String newName, ChannelHandler newHandler) {
+        if (checkDestroyed(newHandler)) {
+            return null;
+        }
+
         assert ctx != head && ctx != tail;
 
         final AbstractChannelHandlerContext newCtx;
@@ -838,6 +868,7 @@ public class DefaultChannelPipeline implements ChannelPipeline {
      * See: https://github.com/netty/netty/issues/3156
      */
     private synchronized void destroy() {
+        destroyed = true;
         destroyUp(head.next, false);
     }
 
